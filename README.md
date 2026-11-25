@@ -72,12 +72,9 @@ com.example.healthmate
 5. Connect an Android device or start an emulator.
 6. Run the application using Android Studio.
 
-## 8. Development Purpose
+8. Development Purpose
 
 This application was developed as part of the Mobile Application Development coursework for the BSc (Hons) Computing Science in Software Engineering programme at Kingston University.
 
-## 9. Author
-
-**Student Name:** Fathima Hajara Fareed
-
-**Project:** HealthMate – Personal Health & Wellness Tracker
+Author: Fathima Hajara Fareed
+HealthMate – Personal Health & Wellness Tracker
