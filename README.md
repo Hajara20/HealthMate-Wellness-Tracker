@@ -22,15 +22,15 @@ The main purpose of HealthMate is to encourage users to maintain healthy habits 
 
 | Technology and the Purpose |
 
-| Kotlin | Main programming language |
-| Android Studio | Development environment |
-| Jetpack Compose | User interface development |
-| Material 3 | UI components and styling |
-| Room Database | Local data storage using SQLite |
-| ViewModel | Manages UI-related data |
-| StateFlow | Observes and updates application state |
-| Kotlin Coroutines | Supports asynchronous operations |
-| Git and GitHub | Version control and source code management |
+| Kotlin -Main programming language |
+| Android Studio - Development environment |
+| Jetpack Compose - User interface development |
+| Material 3- UI components and styling |
+| Room Database - Local data storage using SQLite |
+| ViewModel- Manages UI-related data |
+| StateFlow-Observes and updates application state |
+| Kotlin Coroutines-Supports asynchronous operations |
+| Git and GitHub - Version control and source code management |
 
 ## 4. Application Architecture
 
