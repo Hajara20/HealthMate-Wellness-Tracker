@@ -16,4 +16,14 @@ class HealthRepository(private val healthRecordDao: HealthRecordDao) {
     suspend fun deleteRecord(record: HealthRecord) {
         healthRecordDao.deleteRecord(record)
     }
+
+    // Update an existing health record and return the number of rows updated
+    suspend fun updateRecord(record: HealthRecord): Int {
+        return healthRecordDao.updateRecord(record)
+    }
+
+    // Retrieve a single health record matching a specific date
+    suspend fun getRecordByDate(date: String): HealthRecord? {
+        return healthRecordDao.getRecordByDate(date)
+    }
 }

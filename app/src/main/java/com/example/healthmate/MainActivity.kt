@@ -1,31 +1,57 @@
 package com.example.healthmate
 
+import android.Manifest
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
+import com.example.healthmate.ui.AddRecordScreen
+import com.example.healthmate.ui.DashboardScreen
+import com.example.healthmate.ui.HealthViewModel
+import com.example.healthmate.ui.HistoryScreen
 import com.example.healthmate.ui.theme.HealthMateTheme
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+// Application entry point that initializes HealthViewModel and hosts the Compose UI
 class MainActivity : ComponentActivity() {
 
-    private val viewModel: HealthViewModel by viewModels()
+    // Lazily instantiates HealthViewModel via its custom Factory using Application context
+    private val viewModel: HealthViewModel by viewModels {
+        HealthViewModel.Factory(application)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -35,7 +61,34 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
+                    val context = LocalContext.current
+
+                    // 1. Launcher that handles the user's Allow / Deny response
+                    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+                        contract = ActivityResultContracts.RequestPermission()
+                    ) { isGranted ->
+                        if (isGranted) {
+                            showWaterReminderNotification(context)
+                        }
+                    }
+
+                    // 2. Automatically checks and requests permission on Android 13+ when app opens
+                    LaunchedEffect(Unit) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            val hasPermission = ContextCompat.checkSelfPermission(
+                                context,
+                                Manifest.permission.POST_NOTIFICATIONS
+                            ) == PackageManager.PERMISSION_GRANTED
+
+                            if (!hasPermission) {
+                                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                        }
+                    }
+
+                    // Tracks active destination tab: 0 = Dashboard, 1 = Add Entry, 2 = History
                     var selectedTab by remember { mutableIntStateOf(0) }
+                    // Observes reactive health record list from ViewModel StateFlow
                     val records by viewModel.allRecords.collectAsState()
 
                     Scaffold(
@@ -62,11 +115,30 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     ) { innerPadding ->
+                        // Respects Scaffold insets so content clears the bottom navigation bar
                         Box(modifier = Modifier.padding(innerPadding)) {
                             when (selectedTab) {
-                                0 -> DashboardScreen(records)
-                                1 -> AddRecordScreen(viewModel, onRecordAdded = { selectedTab = 2 })
-                                2 -> HistoryScreen(records, viewModel)
+                                0 -> DashboardScreen(
+                                    records = records,
+                                    onAddClick = { selectedTab = 1 },
+                                    onQuickAddWater = { amountMl ->
+                                        val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+                                        viewModel.insertRecord(
+                                            date = today,
+                                            steps = 0,
+                                            calories = 0,
+                                            water = amountMl
+                                        )
+                                    }
+                                )
+                                1 -> AddRecordScreen(
+                                    viewModel = viewModel,
+                                    onRecordAdded = { selectedTab = 2 }
+                                )
+                                2 -> HistoryScreen(
+                                    records = records,
+                                    viewModel = viewModel
+                                )
                             }
                         }
                     }
@@ -76,157 +148,30 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@Composable
-fun DashboardScreen(records: List<com.example.healthmate.data.HealthRecord>) {
-    // Get today's date string format matching dummy/input format YYYY-MM-DD
-    val currentDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-    val todayRecord = records.find { it.date == currentDate } ?: com.example.healthmate.data.HealthRecord(date = currentDate, steps = 0, calories = 0, water = 0)
+// 3. Helper function to create the channel and trigger the water reminder notification
+fun showWaterReminderNotification(context: Context) {
+    val channelId = "water_reminder_channel"
+    val notificationManager =
+        context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text(text = "HealthMate Dashboard", style = MaterialTheme.typography.headlineMedium)
-        Text(text = "Today – $currentDate", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
-
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                // Steps
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(text = "👣 Steps:", modifier = Modifier.width(140.dp), style = MaterialTheme.typography.bodyLarge)
-                    Text(text = "${todayRecord.steps}", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                }
-                // Calories (Red theme as requested)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(text = "🔥 Calories:", modifier = Modifier.width(140.dp), style = MaterialTheme.typography.bodyLarge)
-                    Text(text = "${todayRecord.calories} kcal", style = MaterialTheme.typography.titleMedium, color = Color(0xFFD32F2F))
-                }
-                // Water (Blue theme as requested)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(text = "💧 Water Intake:", modifier = Modifier.width(140.dp), style = MaterialTheme.typography.bodyLarge)
-                    Text(text = "${todayRecord.water} ml", style = MaterialTheme.typography.titleMedium, color = Color(0xFF1976D2))
-                }
-            }
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val channel = NotificationChannel(
+            channelId,
+            "Water Reminders",
+            NotificationManager.IMPORTANCE_DEFAULT
+        ).apply {
+            description = "Reminds you to stay hydrated throughout the day"
         }
+        notificationManager.createNotificationChannel(channel)
     }
-}
 
-@Composable
-fun AddRecordScreen(viewModel: HealthViewModel, onRecordAdded: () -> Unit) {
-    var dateInput by remember { mutableStateOf(SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())) }
-    var stepsInput by remember { mutableStateOf("") }
-    var caloriesInput by remember { mutableStateOf("") }
-    var waterInput by remember { mutableStateOf("") }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val notification = NotificationCompat.Builder(context, channelId)
+        .setSmallIcon(android.R.drawable.ic_dialog_info)
+        .setContentTitle("Time to Hydrate! 💧")
+        .setContentText("Don't forget to drink a glass of water and log it in HealthMate.")
+        .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+        .setAutoCancel(true)
+        .build()
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Text(text = "Add Daily Health Entry", style = MaterialTheme.typography.headlineMedium)
-
-        OutlinedTextField(
-            value = dateInput,
-            onValueChange = { dateInput = it },
-            label = { Text("Date (YYYY-MM-DD)") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        OutlinedTextField(
-            value = stepsInput,
-            onValueChange = { stepsInput = it },
-            label = { Text("Steps Walked") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        OutlinedTextField(
-            value = caloriesInput,
-            onValueChange = { caloriesInput = it },
-            label = { Text("Calories Burned (kcal)") },
-            modifier = Modifier.fillMaxWidth()
-        )
-        OutlinedTextField(
-            value = waterInput,
-            onValueChange = { waterInput = it },
-            label = { Text("Water Intake (ml)") },
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        if (errorMessage != null) {
-            Text(text = errorMessage!!, color = MaterialTheme.colorScheme.error)
-        }
-
-        Button(
-            onClick = {
-                val steps = stepsInput.toIntOrNull()
-                val calories = caloriesInput.toIntOrNull()
-                val water = waterInput.toIntOrNull()
-
-                if (dateInput.isBlank()) {
-                    errorMessage = "Date cannot be blank."
-                } else if (steps == null || calories == null || water == null) {
-                    errorMessage = "Please enter valid numeric values for steps, calories, and water."
-                } else {
-                    viewModel.addRecord(dateInput, steps, calories, water)
-                    onRecordAdded()
-                }
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Save Entry")
-        }
-    }
-}
-
-@Composable
-fun HistoryScreen(records: List<com.example.healthmate.data.HealthRecord>, viewModel: HealthViewModel) {
-    var searchQuery by remember { mutableStateOf("") }
-
-    // Filter records by date search query
-    val filteredRecords = records.filter { it.date.contains(searchQuery, ignoreCase = true) }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Text(text = "Health Records History", style = MaterialTheme.typography.headlineMedium)
-
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { searchQuery = it },
-            label = { Text("Search/Filter by Date (YYYY-MM-DD)") },
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(filteredRecords) { record ->
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(text = "📅 ${record.date}", style = MaterialTheme.typography.titleSmall)
-                            Text(text = "👣 Steps: ${record.steps}")
-                            Text(text = "🔥 Calories: ${record.calories} kcal", color = Color(0xFFD32F2F))
-                            Text(text = "💧 Water: ${record.water} ml", color = Color(0xFF1976D2))
-                        }
-                        IconButton(onClick = { viewModel.deleteRecord(record) }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete Record", tint = MaterialTheme.colorScheme.error)
-                        }
-                    }
-                }
-            }
-        }
-    }
+    notificationManager.notify(1001, notification)
 }

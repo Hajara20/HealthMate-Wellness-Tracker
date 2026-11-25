@@ -22,6 +22,7 @@ abstract class HealthDatabase : RoomDatabase() {
                     "health_mate_database"
                 ).build()
                 INSTANCE = instance
+                INSTANCE = instance
                 instance
             }
         }
