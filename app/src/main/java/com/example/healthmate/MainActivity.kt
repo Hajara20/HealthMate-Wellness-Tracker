@@ -64,24 +64,17 @@ class MainActivity : ComponentActivity() {
                 ) {
                     val context = LocalContext.current
 
-                    // Stores whether the first notification permission request has been made
-                    val preferences = remember {
-                        context.getSharedPreferences(
-                            "HealthMatePreferences",
-                            Context.MODE_PRIVATE
-                        )
-                    }
-
-                    // Handles the user's Allow / Don't allow response
+                    // Handles the user's notification permission response
                     val notificationPermissionLauncher =
                         rememberLauncherForActivityResult(
                             contract = ActivityResultContracts.RequestPermission()
                         ) { isGranted ->
-                            // The user's choice is remembered by Android and our preferences.
-                            // No notification is sent automatically here.
+                            if (isGranted) {
+                                // Notification permission granted
+                            }
                         }
 
-                    // Requests notification permission only on the first app launch
+                    // Requests notification permission on Android 13 and above
                     LaunchedEffect(Unit) {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
 
@@ -90,29 +83,7 @@ class MainActivity : ComponentActivity() {
                                 Manifest.permission.POST_NOTIFICATIONS
                             ) == PackageManager.PERMISSION_GRANTED
 
-                            val requestAlreadyMade = preferences.getBoolean(
-                                "notification_permission_requested",
-                                false
-                            )
-
-                            if (hasPermission) {
-                                // Permission was already granted
-                                preferences.edit()
-                                    .putBoolean(
-                                        "notification_permission_requested",
-                                        true
-                                    )
-                                    .apply()
-
-                            } else if (!requestAlreadyMade) {
-                                // Remember the request before displaying the permission dialog
-                                preferences.edit()
-                                    .putBoolean(
-                                        "notification_permission_requested",
-                                        true
-                                    )
-                                    .apply()
-
+                            if (!hasPermission) {
                                 notificationPermissionLauncher.launch(
                                     Manifest.permission.POST_NOTIFICATIONS
                                 )
@@ -120,8 +91,11 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    // Tracks active destination tab: 0 = Dashboard, 1 = Add Entry, 2 = History
-                    var selectedTab by remember { mutableIntStateOf(0) }
+                    // Tracks active destination tab:
+                    // 0 = Dashboard, 1 = Add Entry, 2 = History
+                    var selectedTab by remember {
+                        mutableIntStateOf(0)
+                    }
 
                     // Observes reactive health record list from ViewModel StateFlow
                     val records by viewModel.allRecords.collectAsState()
@@ -129,6 +103,7 @@ class MainActivity : ComponentActivity() {
                     Scaffold(
                         bottomBar = {
                             NavigationBar {
+
                                 NavigationBarItem(
                                     icon = {
                                         Icon(
@@ -168,10 +143,11 @@ class MainActivity : ComponentActivity() {
                         }
                     ) { innerPadding ->
 
-                        // Respects Scaffold insets so content clears the bottom navigation bar
+                        // Respects Scaffold insets
                         Box(
                             modifier = Modifier.padding(innerPadding)
                         ) {
+
                             when (selectedTab) {
 
                                 // Dashboard Screen
@@ -226,7 +202,9 @@ fun showWaterReminderNotification(context: Context) {
     val notificationManager =
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
+    // Creates notification channel on Android 8 and above
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+
         val channel = NotificationChannel(
             channelId,
             "Water Reminders",
@@ -238,8 +216,9 @@ fun showWaterReminderNotification(context: Context) {
         notificationManager.createNotificationChannel(channel)
     }
 
-    // Check permission before sending a notification on Android 13+
+    // Checks notification permission on Android 13 and above
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+
         if (
             ContextCompat.checkSelfPermission(
                 context,
