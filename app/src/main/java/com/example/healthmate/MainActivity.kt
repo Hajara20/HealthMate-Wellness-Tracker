@@ -1,3 +1,4 @@
+
 package com.example.healthmate
 
 import android.Manifest
@@ -48,13 +49,13 @@ import java.util.Locale
 // Application entry point that initializes HealthViewModel and hosts the Compose UI
 class MainActivity : ComponentActivity() {
 
-    // Lazily instantiates HealthViewModel via its custom Factory using Application context
     private val viewModel: HealthViewModel by viewModels {
         HealthViewModel.Factory(application)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         setContent {
             HealthMateTheme {
                 Surface(
@@ -63,31 +64,65 @@ class MainActivity : ComponentActivity() {
                 ) {
                     val context = LocalContext.current
 
-                    // 1. Launcher that handles the user's Allow / Deny response
-                    val notificationPermissionLauncher = rememberLauncherForActivityResult(
-                        contract = ActivityResultContracts.RequestPermission()
-                    ) { isGranted ->
-                        if (isGranted) {
-                            showWaterReminderNotification(context)
-                        }
+                    // Stores whether the first notification permission request has been made
+                    val preferences = remember {
+                        context.getSharedPreferences(
+                            "HealthMatePreferences",
+                            Context.MODE_PRIVATE
+                        )
                     }
 
-                    // 2. Automatically checks and requests permission on Android 13+ when app opens
+                    // Handles the user's Allow / Don't allow response
+                    val notificationPermissionLauncher =
+                        rememberLauncherForActivityResult(
+                            contract = ActivityResultContracts.RequestPermission()
+                        ) { isGranted ->
+                            // The user's choice is remembered by Android and our preferences.
+                            // No notification is sent automatically here.
+                        }
+
+                    // Requests notification permission only on the first app launch
                     LaunchedEffect(Unit) {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+
                             val hasPermission = ContextCompat.checkSelfPermission(
                                 context,
                                 Manifest.permission.POST_NOTIFICATIONS
                             ) == PackageManager.PERMISSION_GRANTED
 
-                            if (!hasPermission) {
-                                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            val requestAlreadyMade = preferences.getBoolean(
+                                "notification_permission_requested",
+                                false
+                            )
+
+                            if (hasPermission) {
+                                // Permission was already granted
+                                preferences.edit()
+                                    .putBoolean(
+                                        "notification_permission_requested",
+                                        true
+                                    )
+                                    .apply()
+
+                            } else if (!requestAlreadyMade) {
+                                // Remember the request before displaying the permission dialog
+                                preferences.edit()
+                                    .putBoolean(
+                                        "notification_permission_requested",
+                                        true
+                                    )
+                                    .apply()
+
+                                notificationPermissionLauncher.launch(
+                                    Manifest.permission.POST_NOTIFICATIONS
+                                )
                             }
                         }
                     }
 
                     // Tracks active destination tab: 0 = Dashboard, 1 = Add Entry, 2 = History
                     var selectedTab by remember { mutableIntStateOf(0) }
+
                     // Observes reactive health record list from ViewModel StateFlow
                     val records by viewModel.allRecords.collectAsState()
 
@@ -95,19 +130,36 @@ class MainActivity : ComponentActivity() {
                         bottomBar = {
                             NavigationBar {
                                 NavigationBarItem(
-                                    icon = { Icon(Icons.Default.Home, contentDescription = "Dashboard") },
+                                    icon = {
+                                        Icon(
+                                            Icons.Default.Home,
+                                            contentDescription = "Dashboard"
+                                        )
+                                    },
                                     label = { Text("Dashboard") },
                                     selected = selectedTab == 0,
                                     onClick = { selectedTab = 0 }
                                 )
+
                                 NavigationBarItem(
-                                    icon = { Icon(Icons.Default.Add, contentDescription = "Add Record") },
+                                    icon = {
+                                        Icon(
+                                            Icons.Default.Add,
+                                            contentDescription = "Add Record"
+                                        )
+                                    },
                                     label = { Text("Add Entry") },
                                     selected = selectedTab == 1,
                                     onClick = { selectedTab = 1 }
                                 )
+
                                 NavigationBarItem(
-                                    icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "History") },
+                                    icon = {
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.List,
+                                            contentDescription = "History"
+                                        )
+                                    },
                                     label = { Text("History") },
                                     selected = selectedTab == 2,
                                     onClick = { selectedTab = 2 }
@@ -115,26 +167,44 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     ) { innerPadding ->
+
                         // Respects Scaffold insets so content clears the bottom navigation bar
-                        Box(modifier = Modifier.padding(innerPadding)) {
+                        Box(
+                            modifier = Modifier.padding(innerPadding)
+                        ) {
                             when (selectedTab) {
+
+                                // Dashboard Screen
                                 0 -> DashboardScreen(
                                     records = records,
-                                    onAddClick = { selectedTab = 1 },
+                                    onAddClick = {
+                                        selectedTab = 1
+                                    },
                                     onQuickAddWater = { amountMl ->
-                                        val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-                                        viewModel.insertRecord(
+
+                                        val today = SimpleDateFormat(
+                                            "yyyy-MM-dd",
+                                            Locale.getDefault()
+                                        ).format(Date())
+
+                                        // Adds water to today's existing record
+                                        // instead of creating a duplicate record
+                                        viewModel.addWaterIntake(
                                             date = today,
-                                            steps = 0,
-                                            calories = 0,
-                                            water = amountMl
+                                            amount = amountMl
                                         )
                                     }
                                 )
+
+                                // Add Record Screen
                                 1 -> AddRecordScreen(
                                     viewModel = viewModel,
-                                    onRecordAdded = { selectedTab = 2 }
+                                    onRecordAdded = {
+                                        selectedTab = 2
+                                    }
                                 )
+
+                                // History Screen
                                 2 -> HistoryScreen(
                                     records = records,
                                     viewModel = viewModel
@@ -148,9 +218,11 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// 3. Helper function to create the channel and trigger the water reminder notification
+// Helper function to create the notification channel and display a water reminder
 fun showWaterReminderNotification(context: Context) {
+
     val channelId = "water_reminder_channel"
+
     val notificationManager =
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
@@ -162,13 +234,28 @@ fun showWaterReminderNotification(context: Context) {
         ).apply {
             description = "Reminds you to stay hydrated throughout the day"
         }
+
         notificationManager.createNotificationChannel(channel)
+    }
+
+    // Check permission before sending a notification on Android 13+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        if (
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
     }
 
     val notification = NotificationCompat.Builder(context, channelId)
         .setSmallIcon(android.R.drawable.ic_dialog_info)
         .setContentTitle("Time to Hydrate! 💧")
-        .setContentText("Don't forget to drink a glass of water and log it in HealthMate.")
+        .setContentText(
+            "Don't forget to drink a glass of water and log it in HealthMate."
+        )
         .setPriority(NotificationCompat.PRIORITY_DEFAULT)
         .setAutoCancel(true)
         .build()

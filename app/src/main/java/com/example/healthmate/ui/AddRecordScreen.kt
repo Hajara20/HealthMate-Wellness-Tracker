@@ -1,3 +1,4 @@
+
 package com.example.healthmate.ui
 
 import androidx.compose.foundation.background
@@ -21,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.example.healthmate.data.HealthRecord
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -53,6 +55,7 @@ fun AddRecordScreen(
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -62,9 +65,12 @@ fun AddRecordScreen(
                 .padding(horizontal = 20.dp, vertical = 20.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
+
             Text(
                 text = "Log Health Entry",
-                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontWeight = FontWeight.Bold
+                ),
                 color = MaterialTheme.colorScheme.onSurface
             )
 
@@ -78,13 +84,16 @@ fun AddRecordScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(
+                        alpha = 0.35f
+                    )
                 )
             ) {
                 Column(
                     modifier = Modifier.padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
+
                     // Date Field
                     OutlinedTextField(
                         value = date,
@@ -127,7 +136,10 @@ fun AddRecordScreen(
                         trailingIcon = {
                             if (steps.isNotEmpty()) {
                                 IconButton(onClick = { steps = "" }) {
-                                    Icon(Icons.Default.Clear, contentDescription = "Clear")
+                                    Icon(
+                                        Icons.Default.Clear,
+                                        contentDescription = "Clear"
+                                    )
                                 }
                             }
                         },
@@ -148,13 +160,16 @@ fun AddRecordScreen(
                             onClick = {
                                 val current = steps.toIntOrNull() ?: 0
                                 steps = (current + 1000).toString()
+                                errorMessage = null
                             },
                             label = { Text("+1,000 steps") }
                         )
+
                         AssistChip(
                             onClick = {
                                 val current = steps.toIntOrNull() ?: 0
                                 steps = (current + 5000).toString()
+                                errorMessage = null
                             },
                             label = { Text("+5,000 steps") }
                         )
@@ -178,7 +193,10 @@ fun AddRecordScreen(
                         trailingIcon = {
                             if (calories.isNotEmpty()) {
                                 IconButton(onClick = { calories = "" }) {
-                                    Icon(Icons.Default.Clear, contentDescription = "Clear")
+                                    Icon(
+                                        Icons.Default.Clear,
+                                        contentDescription = "Clear"
+                                    )
                                 }
                             }
                         },
@@ -209,7 +227,10 @@ fun AddRecordScreen(
                         trailingIcon = {
                             if (water.isNotEmpty()) {
                                 IconButton(onClick = { water = "" }) {
-                                    Icon(Icons.Default.Clear, contentDescription = "Clear")
+                                    Icon(
+                                        Icons.Default.Clear,
+                                        contentDescription = "Clear"
+                                    )
                                 }
                             }
                         },
@@ -230,18 +251,22 @@ fun AddRecordScreen(
                             onClick = {
                                 val current = water.toIntOrNull() ?: 0
                                 water = (current + 250).toString()
+                                errorMessage = null
                             },
                             label = { Text("+250 ml") }
                         )
+
                         AssistChip(
                             onClick = {
                                 val current = water.toIntOrNull() ?: 0
                                 water = (current + 500).toString()
+                                errorMessage = null
                             },
                             label = { Text("+500 ml") }
                         )
                     }
 
+                    // Validation and duplicate-date error message
                     errorMessage?.let { error ->
                         Text(
                             text = error,
@@ -253,24 +278,40 @@ fun AddRecordScreen(
                 }
             }
 
+            // Save Record Button
             Button(
                 onClick = {
-                    val error = ValidationHelper.validate(date, steps, calories, water)
+                    val error = ValidationHelper.validate(
+                        date,
+                        steps,
+                        calories,
+                        water
+                    )
+
                     if (error != null) {
                         errorMessage = error
                     } else {
-                        viewModel.insertRecord(
-                            date = date.trim(),
-                            steps = steps.trim().toInt(),
-                            calories = calories.trim().toInt(),
-                            water = water.trim().toInt()
-                        )
-                        showSuccessSnackbar = true
-                        steps = ""
-                        calories = ""
-                        water = ""
-                        errorMessage = null
-                        onRecordAdded()
+                        viewModel.addRecord(
+                            HealthRecord(
+                                date = date.trim(),
+                                steps = steps.trim().toInt(),
+                                calories = calories.trim().toInt(),
+                                water = water.trim().toInt()
+                            )
+                        ) { success ->
+
+                            if (success) {
+                                showSuccessSnackbar = true
+                                steps = ""
+                                calories = ""
+                                water = ""
+                                errorMessage = null
+                                onRecordAdded()
+                            } else {
+                                errorMessage =
+                                    "A health record already exists for this date. Please select another date."
+                            }
+                        }
                     }
                 },
                 modifier = Modifier
@@ -283,7 +324,9 @@ fun AddRecordScreen(
                     contentDescription = null,
                     modifier = Modifier.size(20.dp)
                 )
+
                 Spacer(modifier = Modifier.width(8.dp))
+
                 Text(
                     text = "Save Record",
                     style = MaterialTheme.typography.titleMedium,
